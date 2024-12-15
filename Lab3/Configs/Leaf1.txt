@@ -1,0 +1,86 @@
+! device: Leaf.1 (vEOS-lab, EOS-4.29.2F)
+!
+! boot system flash:/vEOS-lab.swi
+!
+no aaa root
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model ribd
+!
+hostname Leaf.1
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+interface Ethernet1
+   description Spine.1
+   no switchport
+   ip address 10.2.1.1/31
+   isis enable dc1
+   isis bfd
+   isis network point-to-point
+   isis authentication mode md5
+   isis authentication key 7 9q99ta8yYgo=
+!
+interface Ethernet2
+   description Spine.2
+   no switchport
+   ip address 10.2.2.1/31
+   isis enable dc1
+   isis bfd
+   isis network point-to-point
+   isis authentication mode md5
+   isis authentication key 7 9q99ta8yYgo=
+!
+interface Ethernet3
+   isis enable dc1
+   isis passive
+!
+interface Ethernet4
+   isis enable dc1
+   isis passive
+!
+interface Ethernet5
+   isis enable dc1
+   isis passive
+!
+interface Ethernet6
+   isis enable dc1
+   isis passive
+!
+interface Ethernet7
+   isis enable dc1
+   isis passive
+!
+interface Ethernet8
+   isis enable dc1
+   isis passive
+!
+interface Loopback1
+   ip address 10.1.1.1/32
+   isis enable dc1
+   isis instance dc1
+!
+interface Loopback2
+   ip address 10.1.1.2/32
+   isis enable dc1
+   isis instance dc1
+!
+interface Loopback3
+   ip address 10.1.1.3/32
+   isis instance dc1
+!
+interface Management1
+!
+ip routing
+!
+router isis dc1
+   net 49.0001.0100.0100.1001.00
+   is-type level-2
+   log-adjacency-changes
+   !
+   address-family ipv4 unicast
+!
+end
