@@ -1,0 +1,83 @@
+no aaa root
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model ribd
+!
+hostname Leaf.1
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+interface Ethernet1
+   description Spine.1
+   no switchport
+   ip address 10.2.1.1/31
+!
+interface Ethernet2
+   description Spine.2
+   no switchport
+   ip address 10.2.2.1/31
+!
+interface Ethernet3
+!
+interface Ethernet4
+!
+interface Ethernet5
+!
+interface Ethernet6
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback1
+   ip address 10.1.1.1/32
+!
+interface Loopback2
+   ip address 10.1.1.2/32
+!
+interface Loopback3
+   ip address 10.1.1.3/32
+!
+interface Management1
+!
+ip routing
+!
+ip prefix-list EXPORT
+   seq 10 permit 10.1.0.0/16 le 32
+!
+ip prefix-list IMPORT
+   seq 10 permit 10.0.0.0/16 le 32
+   seq 20 permit 10.1.0.0/16 le 32
+!
+route-map LF_EXPORT permit 10
+   description Export Loopback from Leaf
+   match ip address prefix-list EXPORT
+!
+route-map LF_IMPORT permit 10
+   description Import Loopback from Spine and Leaf
+   match ip address prefix-list IMPORT
+!
+router bgp 65101
+   router-id 10.1.1.1
+   maximum-paths 2 ecmp 64
+   neighbor SPINES peer group
+   neighbor SPINES remote-as 65001
+   neighbor SPINES bfd
+   neighbor SPINES password 7 wMeqR2znTcw=
+   neighbor 10.2.1.0 peer group SPINES
+   neighbor 10.2.1.0 description spine.1
+   neighbor 10.2.2.0 peer group SPINES
+   neighbor 10.2.2.0 description spine.2
+   !
+   address-family ipv4
+      neighbor SPINES activate
+      neighbor SPINES route-map LF_IMPORT in
+      neighbor SPINES route-map LF_EXPORT out
+      network 10.1.1.1/32
+      network 10.1.1.2/32
+      network 10.1.1.3/32
+!
+end
