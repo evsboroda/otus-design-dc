@@ -193,8 +193,10 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  * >     10.1.1.3/32            10.2.1.1              0       100     0       65101 i
 ```
 <b>Leaf.1</b>
+
 ![update_leaf1.jpg](/Lab4/update_leaf1.jpg)
 <b>Spine.1</b>
+
 ![update_spine1.jpg](/Lab4/update_spine1.jpg)
 </details>
 
