@@ -5,7 +5,7 @@
 
 ### Схема стенда
 Схему для eBGP будем использовать без изменений, только поделим по AS.
-![Topolpgy_eBGP.jpg](/Lab4/Topolpgy_eBGP.jpg)
+![Topolpgy_eBGP.jpg](/Lab4_BGP/Topolpgy_eBGP.jpg)
 
 Автономные системы будем использовать 2х байтные. 
 Для Spine будем использовать общую AS, для Leaf'ов разные.

@@ -3,7 +3,7 @@
 
 ### Схема стенда
 Схему будем использовать без изменений.
-![Topology.jpg](/Lab3/Topology.jpg)
+![Topology.jpg](/Lab3_ISIS/Topology.jpg)
 
 
 Как и в OSPF в IS-IS есть индефикатор области AREA называемый NET (Network Entity Title) который имеет следущий формат:

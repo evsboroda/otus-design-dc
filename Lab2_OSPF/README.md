@@ -3,7 +3,7 @@
  - Настроить OSPF для Underlay сети.
 
 ### Схема стенда
-![Topology.jpg](/Lab2/Topology.jpg)
+![Topology.jpg](/Lab2_OSPF/Topology.jpg)
 
 Первым делом надо включить маршрутизацию.
 

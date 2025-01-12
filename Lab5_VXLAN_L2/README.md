@@ -7,7 +7,7 @@
 
 ### Схема стенда
 Схему для VxLAN/EVPN L2 будем использовать без изменений, только добавим клиентов.
-![Topology_VxLan_EVPNL2.jpg](/Lab5/Topology_VxLan_EVPNL2.jpg)
+![Topology_VxLan_EVPNL2.jpg](/Lab5_VXLAN_L2/Topology_VxLan_EVPNL2.jpg)
 
 Для клиентов будем использовать следующие vlan и ip сети.
 
