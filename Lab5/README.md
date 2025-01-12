@@ -188,10 +188,15 @@ router bgp 65001
 При включении _vlan_, vtep отправляет bgp update с route-type 3 и если ещё есть коммутаторы с таким же _vlan_ до он добавляет их к себе в таблицу.
 
 **Attribute MP_REACH_NLRI**
+
 ![alt text](Dump/Route-type3.jpg)
+
 **Attribute EXTENDED_COMMUNITIES**
+
 ![alt text](Dump/Route-type3_2.jpg)
+
 **Attribute PMSI_TUNNEL_ATTRIBUTE**
+
 ![alt text](Dump/Route-type3_3.jpg)
 
 Итоговая конфигурция VxLan/EVPN на _Leaf.1_:
