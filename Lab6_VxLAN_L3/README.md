@@ -7,6 +7,7 @@
 
 ### Схема стенда
 Схему для VxLAN/EVPN L3VNI будем использовать из [Лабороторной 4](https://github.com/evsboroda/otus-design-dc/tree/main/Lab4_BGP) для eBGP, только добавим клиентов.
+
 ![Topology_VxLan_EVPNL3.jpg](/Lab6_VXLAN_L3/Topology_VxLan_EVPNL3.jpg)
 
 Автономные системы будем использовать 2х байтные. 
