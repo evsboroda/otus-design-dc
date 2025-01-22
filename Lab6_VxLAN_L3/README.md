@@ -355,6 +355,7 @@ rtt min/avg/max/mdev = 60.199/109.889/234.353/60.675 ms
 
 <details>
 <summary>Проверим таблицу маршрутизации для VRF1. У нас есть как и ip-mac /32 маршруты полученные из Route-type 2, так и /24 полученные из Route-type 5</summary>
+
 ```
 VRF: VRF1
 Codes: C - connected, S - static, K - kernel, 
