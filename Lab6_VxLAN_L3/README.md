@@ -353,6 +353,33 @@ rtt min/avg/max/mdev = 60.199/109.889/234.353/60.675 ms
 ```
 </details>
 
+<details>
+<summary>Проверим таблицу маршрутизации для VRF1. У нас есть как и ip-mac /32 маршруты полученные из Route-type 2, так и /24 полученные из Route-type 5</summary>
+```
+VRF: VRF1
+Codes: C - connected, S - static, K - kernel, 
+       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
+       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
+       N2 - OSPF NSSA external type2, B - Other BGP Routes,
+       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
+       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
+       A O - OSPF Summary, NG - Nexthop Group Static Route,
+       V - VXLAN Control Service, M - Martian,
+       DH - DHCP client installed default route,
+       DP - Dynamic Policy Route, L - VRF Leaked,
+       G  - gRIBI, RC - Route Cache Route
+
+Gateway of last resort is not set
+
+ B E      192.168.10.20/32 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
+ B E      192.168.10.30/32 [200/0] via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
+ C        192.168.10.0/24 is directly connected, Vlan10
+ B E      192.168.20.10/32 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
+ B E      192.168.20.20/32 [200/0] via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
+ B E      192.168.20.0/24 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
+                                  via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
+```
+</details>
 
 Итог: Настроили L3 связанности между клиентами с использованием EVPN. С помощью *Route-type 5* решили проблему "молчаливых клиентов"
 
