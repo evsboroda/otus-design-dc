@@ -1,0 +1,122 @@
+no aaa root
+!
+terminal width 511
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model multi-agent
+!
+hostname Leaf.1
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+vlan 10
+!
+vrf instance VRF1
+!
+interface Ethernet1
+   description Spine.1
+   mtu 9214
+   no switchport
+   ipv6 enable
+!
+interface Ethernet2
+   description Spine.2
+   mtu 9214
+   no switchport
+   ipv6 enable
+!
+interface Ethernet3
+!
+interface Ethernet4
+!
+interface Ethernet5
+   switchport access vlan 10
+!
+interface Ethernet6
+   switchport access vlan 10
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback1
+   ip address 10.1.1.1/32
+!
+interface Loopback2
+   ip address 10.1.1.2/32
+!
+interface Loopback3
+   ip address 10.1.1.3/32
+!
+interface Management1
+!
+interface Vlan10
+   mtu 9214
+   vrf VRF1
+   ip address virtual 192.168.10.1/24
+!
+interface Vxlan1
+   vxlan source-interface Loopback1
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10
+   vxlan vrf VRF1 vni 5000
+!
+ip virtual-router mac-address 00:00:00:00:00:10
+!
+ip routing ipv6 interfaces 
+ip routing vrf VRF1
+!
+ip prefix-list EXPORT
+   seq 10 permit 10.1.0.0/16 le 32
+!
+ip prefix-list IMPORT
+   seq 10 permit 10.0.0.0/16 le 32
+   seq 20 permit 10.1.0.0/16 le 32
+!
+ipv6 unicast-routing
+!
+route-map LF_EXPORT permit 10
+   description Export Loopback from Leaf
+   match ip address prefix-list EXPORT
+!
+route-map LF_IMPORT permit 10
+   description Import Loopback from Spine and Leaf
+   match ip address prefix-list IMPORT
+!
+router bgp 65101
+   router-id 10.1.1.1
+   maximum-paths 2 ecmp 64
+   neighbor SPINES peer group
+   neighbor SPINES bfd
+   neighbor SPINES bfd interval 700 min-rx 700 multiplier 3
+   neighbor SPINES password 7 wMeqR2znTcw=
+   neighbor SPINES send-community extended
+   neighbor interface Et1-2 peer-group SPINES remote-as 65001
+   !
+   vlan 10
+      rd auto
+      route-target both 10:10010
+      redistribute learned
+   !
+   address-family evpn
+      neighbor SPINES activate
+   !
+   address-family ipv4
+      neighbor SPINES activate
+      neighbor SPINES route-map LF_IMPORT in
+      neighbor SPINES route-map LF_EXPORT out
+      neighbor SPINES next-hop address-family ipv6 originate
+      network 10.1.1.1/32
+      network 10.1.1.2/32
+      network 10.1.1.3/32
+   !
+   vrf VRF1
+      rd 10.1.1.1:5000
+      route-target import evpn 5000:5000
+      route-target export evpn 5000:5000
+      redistribute connected
+!
+end
