@@ -1,0 +1,372 @@
+service routing protocols model multi-agent
+!
+hostname DC-LZ-BLF-2
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+vlan 10
+   name SRV10
+!
+vlan 20
+   name SRV20
+!
+vlan 2001
+   name MGMT
+!
+vrf instance MGMT
+!
+vrf instance SRV
+!
+interface Ethernet1
+   description DC-LZ-SP.1
+   mtu 9214
+   no switchport
+   ip address 10.2.1.103/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 DQRB1cPDQvk=
+!
+interface Ethernet2
+   description DC-LZ-SP.2
+   mtu 9214
+   no switchport
+   ip address 10.2.2.103/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 epwCMyhnEnI=
+!
+interface Ethernet3
+!
+interface Ethernet4
+   description DC-LZ-RTR
+   no switchport
+!
+interface Ethernet4.500
+   description VRF_SRV
+   encapsulation dot1q vlan 500
+   vrf SRV
+   ip address 10.4.2.0/31
+!
+interface Ethernet4.600
+   description VRF_MGMT
+   encapsulation dot1q vlan 600
+   vrf MGMT
+   ip address 10.4.2.100/31
+!
+interface Ethernet5
+   description DC-1-CORE
+   no switchport
+   vrf SRV
+   ip address 10.4.2.2/31
+!
+interface Ethernet6
+   description LZ-XK-01
+   no switchport
+   vrf SRV
+   ip address 10.4.2.4/31
+!
+interface Ethernet7
+   description LZ-OBJ-1
+   no switchport
+   vrf SRV
+   ip address 10.4.2.6/31
+!
+interface Ethernet8
+!
+interface Loopback1
+   description iBGP
+   ip address 10.3.2.1/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback2
+   description VXLAN
+   ip address 10.3.2.2/32
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+interface Vxlan1
+   vxlan source-interface Loopback2
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10
+   vxlan vlan 20 vni 20
+   vxlan vrf MGMT vni 6000
+   vxlan vrf SRV vni 5000
+!
+ip virtual-router mac-address 00:00:00:00:00:10
+!
+ip routing
+ip routing vrf MGMT
+ip routing vrf SRV
+!
+ip prefix-list HOST_ROUTE seq 10 permit 0.0.0.0/0 eq 32
+!
+route-map DENY_HOST_ROUTE deny 10
+   match ip address prefix-list HOST_ROUTE
+!
+route-map DENY_HOST_ROUTE permit 20
+!
+router bgp 64600
+   router-id 10.3.2.1
+   timers bgp 30 90
+   neighbor DC-1 peer group
+   neighbor DC-1 remote-as 65535
+   neighbor DC-LZ-RTR peer group
+   neighbor DC-LZ-RTR remote-as 64700
+   neighbor DC-LZ-RTR bfd
+   neighbor SPINES peer group
+   neighbor SPINES remote-as 64600
+   neighbor SPINES update-source Loopback1
+   neighbor SPINES send-community extended
+   neighbor 10.0.1.1 peer group SPINES
+   neighbor 10.0.1.1 description DC-LZ-SP.1
+   neighbor 10.0.2.1 peer group SPINES
+   neighbor 10.0.2.1 description DC-LZ-SP.2
+   !
+   vlan 10
+      rd auto
+      route-target both 10:1010
+      redistribute learned
+   !
+   vlan 20
+      rd auto
+      route-target both 20:1020
+      redistribute learned
+   !
+   address-family evpn
+      neighbor SPINES activate
+   !
+   address-family ipv4
+      neighbor DC-1 activate
+      neighbor DC-1 route-map DENY_HOST_ROUTE out
+      neighbor DC-LZ-RTR activate
+      neighbor DC-LZ-RTR route-map DENY_HOST_ROUTE out
+      no neighbor SPINES activate
+   !
+   vrf MGMT
+      rd 10.3.2.1:6000
+      route-target import evpn 6000:6000
+      route-target export evpn 6000:6000
+      neighbor 10.4.2.101 peer group DC-LZ-RTR
+      neighbor 10.4.2.101 description DC-LZ-RTR_VRF_MGMT
+      redistribute connected
+   !
+   vrf SRV
+      rd 10.3.2.1:5000
+      route-target import evpn 5000:5000
+      route-target export evpn 5000:5000
+      neighbor 10.4.2.1 peer group DC-LZ-RTR
+      neighbor 10.4.2.1 description DC-LZ-RTR_VRF_SRV
+      neighbor 10.4.2.3 peer group DC-1
+      neighbor 10.4.2.3 description DC-1-CORE
+      neighbor 10.4.2.5 peer group DC-1
+      neighbor 10.4.2.5 description LZ-XK-01
+      neighbor 10.4.2.7 remote-as 65001
+      neighbor 10.4.2.7 description LZ-OBJ-1
+      neighbor 10.4.2.7 route-map DENY_HOST_ROUTE out
+      redistribute connected
+!
+router ospf 10
+   router-id 10.3.2.1
+   passive-interface default
+   no passive-interface Ethernet1
+   no passive-interface Ethernet2
+   passive-interface Ethernet3
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end
+service routing protocols model multi-agent
+!
+hostname DC-LZ-BLF-2
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+vlan 10
+   name SRV10
+!
+vlan 20
+   name SRV20
+!
+vlan 2001
+   name MGMT
+!
+vrf instance MGMT
+!
+vrf instance SRV
+!
+interface Ethernet1
+   description DC-LZ-SP.1
+   mtu 9214
+   no switchport
+   ip address 10.2.1.103/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 DQRB1cPDQvk=
+!
+interface Ethernet2
+   description DC-LZ-SP.2
+   mtu 9214
+   no switchport
+   ip address 10.2.2.103/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 epwCMyhnEnI=
+!
+interface Ethernet3
+!
+interface Ethernet4
+   description DC-LZ-RTR
+   no switchport
+!
+interface Ethernet4.500
+   description VRF_SRV
+   encapsulation dot1q vlan 500
+   vrf SRV
+   ip address 10.4.2.0/31
+!
+interface Ethernet4.600
+   description VRF_MGMT
+   encapsulation dot1q vlan 600
+   vrf MGMT
+   ip address 10.4.2.100/31
+!
+interface Ethernet5
+   description DC-1-CORE
+   no switchport
+   vrf SRV
+   ip address 10.4.2.2/31
+!
+interface Ethernet6
+   description LZ-XK-01
+   no switchport
+   vrf SRV
+   ip address 10.4.2.4/31
+!
+interface Ethernet7
+   description LZ-OBJ-1
+   no switchport
+   vrf SRV
+   ip address 10.4.2.6/31
+!
+interface Ethernet8
+!
+interface Loopback1
+   description iBGP
+   ip address 10.3.2.1/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback2
+   description VXLAN
+   ip address 10.3.2.2/32
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+interface Vxlan1
+   vxlan source-interface Loopback2
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10
+   vxlan vlan 20 vni 20
+   vxlan vrf MGMT vni 6000
+   vxlan vrf SRV vni 5000
+!
+ip virtual-router mac-address 00:00:00:00:00:10
+!
+ip routing
+ip routing vrf MGMT
+ip routing vrf SRV
+!
+ip prefix-list HOST_ROUTE seq 10 permit 0.0.0.0/0 eq 32
+!
+route-map DENY_HOST_ROUTE deny 10
+   match ip address prefix-list HOST_ROUTE
+!
+route-map DENY_HOST_ROUTE permit 20
+!
+router bgp 64600
+   router-id 10.3.2.1
+   timers bgp 30 90
+   neighbor DC-1 peer group
+   neighbor DC-1 remote-as 65535
+   neighbor DC-LZ-RTR peer group
+   neighbor DC-LZ-RTR remote-as 64700
+   neighbor DC-LZ-RTR bfd
+   neighbor SPINES peer group
+   neighbor SPINES remote-as 64600
+   neighbor SPINES update-source Loopback1
+   neighbor SPINES send-community extended
+   neighbor 10.0.1.1 peer group SPINES
+   neighbor 10.0.1.1 description DC-LZ-SP.1
+   neighbor 10.0.2.1 peer group SPINES
+   neighbor 10.0.2.1 description DC-LZ-SP.2
+   !
+   vlan 10
+      rd auto
+      route-target both 10:1010
+      redistribute learned
+   !
+   vlan 20
+      rd auto
+      route-target both 20:1020
+      redistribute learned
+   !
+   address-family evpn
+      neighbor SPINES activate
+   !
+   address-family ipv4
+      neighbor DC-1 activate
+      neighbor DC-1 route-map DENY_HOST_ROUTE out
+      neighbor DC-LZ-RTR activate
+      neighbor DC-LZ-RTR route-map DENY_HOST_ROUTE out
+      no neighbor SPINES activate
+   !
+   vrf MGMT
+      rd 10.3.2.1:6000
+      route-target import evpn 6000:6000
+      route-target export evpn 6000:6000
+      neighbor 10.4.2.101 peer group DC-LZ-RTR
+      neighbor 10.4.2.101 description DC-LZ-RTR_VRF_MGMT
+      redistribute connected
+   !
+   vrf SRV
+      rd 10.3.2.1:5000
+      route-target import evpn 5000:5000
+      route-target export evpn 5000:5000
+      neighbor 10.4.2.1 peer group DC-LZ-RTR
+      neighbor 10.4.2.1 description DC-LZ-RTR_VRF_SRV
+      neighbor 10.4.2.3 peer group DC-1
+      neighbor 10.4.2.3 description DC-1-CORE
+      neighbor 10.4.2.5 peer group DC-1
+      neighbor 10.4.2.5 description LZ-XK-01
+      neighbor 10.4.2.7 remote-as 65001
+      neighbor 10.4.2.7 description LZ-OBJ-1
+      neighbor 10.4.2.7 route-map DENY_HOST_ROUTE out
+      redistribute connected
+!
+router ospf 10
+   router-id 10.3.2.1
+   passive-interface default
+   no passive-interface Ethernet1
+   no passive-interface Ethernet2
+   passive-interface Ethernet3
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end

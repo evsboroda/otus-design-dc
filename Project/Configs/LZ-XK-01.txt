@@ -1,0 +1,76 @@
+service routing protocols model multi-agent
+!
+hostname LZ-XK-01
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+interface Ethernet1
+   description DC-1-CORE
+   no switchport
+   ip address 10.192.2.1/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet2
+   description DC-LZ-BLF-1
+   no switchport
+   ip address 10.4.1.5/31
+!
+interface Ethernet3
+   description DC-LZ-BLF-2
+   no switchport
+   ip address 10.4.2.5/31
+!
+interface Ethernet4
+!
+interface Ethernet5
+!
+interface Ethernet6
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback0
+   description MGMT
+   ip address 10.192.127.11/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   description SVN-1
+   ip address 10.194.1.10/24
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+ip routing
+!
+ip prefix-list HOST_ROUTE seq 10 permit 0.0.0.0/32 ge 32
+!
+route-map DENY_HOST_ROUTE deny 10
+   match ip address prefix-list HOST_ROUTE
+!
+router bgp 65535
+   router-id 10.192.127.11
+   timers bgp 30 90
+   neighbor DC-LZ peer group
+   neighbor DC-LZ remote-as 64600
+   neighbor 10.4.1.4 peer group DC-LZ
+   neighbor 10.4.1.4 description DC-LZ-BLF-1
+   neighbor 10.4.2.4 peer group DC-LZ
+   neighbor 10.4.2.4 description DC-LZ-BLF-2
+   !
+   address-family ipv4
+      neighbor DC-LZ activate
+      network 10.194.1.0/24
+!
+router ospf 10
+   router-id 10.192.127.11
+   passive-interface default
+   no passive-interface Ethernet1
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end

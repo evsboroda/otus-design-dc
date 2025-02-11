@@ -1,0 +1,48 @@
+DC-1-SW#show running-config 
+! Command: show running-config
+! device: DC-1-SW (vEOS-lab, EOS-4.29.2F)
+!
+! boot system flash:/vEOS-lab.swi
+!
+no aaa root
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model ribd
+!
+hostname DC-1-SW
+!
+spanning-tree mode mstp
+!
+vlan 10
+   name SRV10
+!
+vlan 30
+   name SRV30
+!
+interface Ethernet1
+   switchport access vlan 30
+!
+interface Ethernet2
+!
+interface Ethernet3
+!
+interface Ethernet4
+!
+interface Ethernet5
+!
+interface Ethernet6
+!
+interface Ethernet7
+   switchport trunk allowed vlan 30
+   switchport mode trunk
+!
+interface Ethernet8
+   switchport trunk allowed vlan 10,30
+   switchport mode trunk
+!
+interface Management1
+!
+no ip routing
+!
+end

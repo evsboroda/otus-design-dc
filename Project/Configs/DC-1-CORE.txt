@@ -1,0 +1,112 @@
+service routing protocols model multi-agent
+!
+hostname DC-1-CORE
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+vlan 10
+   name SRV10
+!
+vlan 20
+   name SRV20
+!
+vlan 30
+   name SRV30
+!
+vlan 2001
+   name MGMT
+!
+interface Ethernet1
+   description DC-1-SW
+   switchport trunk allowed vlan 10,20,30
+   switchport mode trunk
+!
+interface Ethernet2
+   description LZ-XK-01
+   no switchport
+   ip address 10.192.2.0/31
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet3
+   description LZ-OBJ-1
+   no switchport
+   ip address 10.192.2.2/31
+!
+interface Ethernet4
+   description DC-LZ-BLF-1
+   no switchport
+   ip address 10.4.1.3/31
+!
+interface Ethernet5
+   description DC-LZ-BLF-2
+   no switchport
+   ip address 10.4.2.3/31
+!
+interface Ethernet6
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback0
+   description MGMT
+   ip address 10.192.127.1/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback1
+   ip address 10.193.1.10/24
+!
+interface Management1
+!
+interface Vlan10
+   description SRV10-GW
+   shutdown
+   ip address 10.182.10.1/24
+!
+interface Vlan20
+   description SRV20-GW
+   shutdown
+   ip address 10.182.20.1/24
+!
+interface Vlan30
+   shutdown
+   ip address 10.182.30.1/24
+   ip ospf area 0.0.0.0
+!
+ip routing
+!
+router bgp 65535
+   router-id 10.192.127.1
+   timers bgp 30 90
+   neighbor DC-LZ peer group
+   neighbor DC-LZ remote-as 64600
+   neighbor OBJ peer group
+   neighbor OBJ remote-as 65001
+   neighbor 10.4.1.2 peer group DC-LZ
+   neighbor 10.4.1.2 description DC-LZ-BLF-1_VRF_SRV
+   neighbor 10.4.1.102 peer group DC-LZ
+   neighbor 10.4.1.102 description DC-LZ-BLF-1_VRF_MGMT
+   neighbor 10.4.2.2 peer group DC-LZ
+   neighbor 10.4.2.2 description DC-LZ-BLF-2_VRF_SRV
+   neighbor 10.4.2.102 peer group DC-LZ
+   neighbor 10.4.2.102 description DC-LZ-BLF-2_VRF_MGMT
+   neighbor 10.192.2.3 peer group OBJ
+   neighbor 10.192.2.3 description OBJ-1
+   !
+   address-family ipv4
+      neighbor DC-LZ activate
+      neighbor OBJ activate
+      network 10.182.30.0/24
+      network 10.193.1.0/24
+!
+router ospf 10
+   router-id 10.192.127.1
+   passive-interface default
+   no passive-interface Ethernet2
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end

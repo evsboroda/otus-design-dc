@@ -1,0 +1,134 @@
+service routing protocols model multi-agent
+!
+hostname DC-LZ-SP-1
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+interface Ethernet1
+   description DC-LZ-LF-1
+   mtu 9214
+   no switchport
+   ip address 10.2.1.0/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 DQRB1cPDQvk=
+!
+interface Ethernet2
+   description Leaf.2
+   mtu 9214
+   no switchport
+   ip address 10.2.1.2/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 epwCMyhnEnI=
+!
+interface Ethernet3
+   description DC-LZ-LF-3
+   mtu 9214
+   no switchport
+   ip address 10.2.1.4/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 epwCMyhnEnI=
+!
+interface Ethernet4
+   description DC-LZ-LF-4
+   mtu 9214
+   no switchport
+   ip address 10.2.1.6/31
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 X7miiqyRD0c=
+!
+interface Ethernet5
+   description DC-LZ-BLF-1
+   mtu 9214
+   no switchport
+   ip address 10.2.1.100/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 X7miiqyRD0c=
+!
+interface Ethernet6
+   description DC-LZ-BLF-2
+   mtu 9214
+   no switchport
+   ip address 10.2.1.102/31
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 yu3qgZ9/pX0=
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback1
+   ip address 10.0.1.1/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback2
+   ip address 10.0.1.2/32
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+ip routing
+!
+router bgp 64600
+   router-id 10.0.1.1
+   neighbor BLEAFS peer group
+   neighbor BLEAFS remote-as 64600
+   neighbor BLEAFS update-source Loopback1
+   neighbor BLEAFS route-reflector-client
+   neighbor BLEAFS send-community extended
+   neighbor LEAFS peer group
+   neighbor LEAFS remote-as 64600
+   neighbor LEAFS update-source Loopback1
+   neighbor LEAFS route-reflector-client
+   neighbor LEAFS send-community extended
+   neighbor 10.1.1.1 peer group LEAFS
+   neighbor 10.1.2.1 peer group LEAFS
+   neighbor 10.1.3.1 peer group LEAFS
+   neighbor 10.1.4.1 peer group LEAFS
+   neighbor 10.3.1.1 peer group BLEAFS
+   neighbor 10.3.2.1 peer group BLEAFS
+   !
+   address-family evpn
+      neighbor BLEAFS activate
+      neighbor LEAFS activate
+   !
+   address-family ipv4
+      no neighbor BLEAFS activate
+      no neighbor LEAFS activate
+!
+router ospf 10
+   router-id 10.0.1.1
+   passive-interface default
+   no passive-interface Ethernet1
+   no passive-interface Ethernet2
+   no passive-interface Ethernet3
+   no passive-interface Ethernet4
+   no passive-interface Ethernet5
+   no passive-interface Ethernet6
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end
