@@ -213,7 +213,7 @@
 
  - [LZ-Obj-1](Configs/LZ-OBJ-1.txt)
 
-### пПриметральныйые шкафы (Территория)
+### Периметральные шкафы (Территория)
 
  - [LZ-XK-01](Configs/LZ-XK-01.txt)
 
@@ -221,7 +221,7 @@
 
 - [DC-LZ-SP-1](Configs/DC-LZ-SP-1.txt)
 
-- [DC-LZ-SP-2]](Configs/DC-LZ-SP-2.txt)
+- [DC-LZ-SP-2](Configs/DC-LZ-SP-2.txt)
 
 - [DC-LZ-BLF-1](Configs/DC-LZ-BLF-1.txt)
 
