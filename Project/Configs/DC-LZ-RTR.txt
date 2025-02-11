@@ -1,0 +1,169 @@
+#
+ version 7.1.064, Release 0621P18
+#
+ sysname DC-LZ-RTR
+#
+ password-recovery enable
+#
+vlan 1
+#
+irf-port
+#
+interface NULL0
+#
+interface LoopBack0
+ ip address 10.4.0.1 255.255.255.255
+#
+interface LoopBack1
+ ip address 77.88.8.8 255.255.255.255
+#
+interface GigabitEthernet1/0
+ description DC-LZ-BLF-1
+#
+interface GigabitEthernet1/0.500
+ description VRF_SRV
+ ip address 10.4.1.1 255.255.255.254
+ vlan-type dot1q vid 500
+#
+interface GigabitEthernet1/0.600
+ description VRF_MGMT
+ ip address 10.4.1.101 255.255.255.254
+ vlan-type dot1q vid 600
+#
+interface GigabitEthernet2/0
+ description DC-LZ-BLF-2
+#
+interface GigabitEthernet2/0.500
+ description VRF_SRV
+ ip address 10.4.2.1 255.255.255.254
+ vlan-type dot1q vid 500
+#
+interface GigabitEthernet2/0.600
+ description VRF_MGMT
+ ip address 10.4.2.101 255.255.255.254
+ vlan-type dot1q vid 600
+#
+interface GigabitEthernet3/0
+#              
+bgp 64700
+ router-id 10.4.0.1
+ timer keepalive 30 hold 90
+ group BLEAF_VRF_MGMT external
+ peer BLEAF_VRF_MGMT as-number 64600
+ peer BLEAF_VRF_MGMT substitute-as
+ peer BLEAF_VRF_MGMT bfd
+ group BLEAF_VRF_SRV external
+ peer BLEAF_VRF_SRV as-number 64600
+ peer BLEAF_VRF_SRV substitute-as
+ peer BLEAF_VRF_SRV bfd
+ peer 10.4.1.0 group BLEAF_VRF_SRV
+ peer 10.4.1.0 description DC-LZ-BLF-1_VRF_SRV
+ peer 10.4.1.100 group BLEAF_VRF_MGMT
+ peer 10.4.1.100 description DC-LZ-BLF-1_VRF_MGMT
+ peer 10.4.2.0 group BLEAF_VRF_SRV
+ peer 10.4.2.0 description DC-LZ-BLF-2_VRF_SRV
+ peer 10.4.2.100 group BLEAF_VRF_MGMT
+ peer 10.4.2.100 description DC-LZ-BLF-2_VRF_MGMT
+ #
+ address-family ipv4 unicast
+  peer BLEAF_VRF_MGMT enable
+  peer BLEAF_VRF_MGMT route-policy VRF_MGMT_OUT export
+  peer BLEAF_VRF_MGMT default-route-advertise
+  peer BLEAF_VRF_SRV enable
+  peer BLEAF_VRF_SRV route-policy VRF_SRV_OUT export
+  peer BLEAF_VRF_SRV default-route-advertise
+#
+route-policy VRF_MGMT_OUT permit node 10
+ if-match ip address prefix-list VRF_MGMT_EXPORT
+#
+route-policy VRF_SRV_OUT permit node 5
+ if-match ip address prefix-list VRF_SRV_EXPORT
+#
+route-policy VRF_SRV_OUT deny node 10
+ if-match ip address prefix-list VRF_SRV
+#
+route-policy test permit node 10
+ if-match as-path 1
+ apply as-path 64701
+#
+ ip prefix-list VRF_MGMT index 1 permit 10.200.0.0 16
+ ip prefix-list VRF_MGMT_EXPORT index 10 permit 10.182.0.0 16 less-equal 32
+ ip prefix-list VRF_SRV index 2 permit 10.182.0.0 16 less-equal 32
+ ip prefix-list VRF_SRV_EXPORT index 10 permit 10.200.0.0 16 less-equal 32
+#              
+ ip as-path 1 permit 64600
+#
+ scheduler logfile size 16
+#
+line class aux
+ user-role network-operator
+#
+line class console
+ user-role network-admin
+#
+line class vty
+ user-role network-operator
+#
+line aux 0
+ authentication-mode none
+ user-role network-admin
+ user-role network-operator
+#
+line con 0
+ user-role network-admin
+#
+line vty 0 63
+ user-role network-operator
+#
+domain system
+#
+ domain default enable system
+#
+role name level-0
+ description Predefined level-0 role
+#
+role name level-1
+ description Predefined level-1 role
+#
+role name level-2
+ description Predefined level-2 role
+#
+role name level-3
+ description Predefined level-3 role
+#
+role name level-4
+ description Predefined level-4 role
+#
+role name level-5
+ description Predefined level-5 role
+#              
+role name level-6
+ description Predefined level-6 role
+#
+role name level-7
+ description Predefined level-7 role
+#
+role name level-8
+ description Predefined level-8 role
+#
+role name level-9
+ description Predefined level-9 role
+#
+role name level-10
+ description Predefined level-10 role
+#
+role name level-11
+ description Predefined level-11 role
+#
+role name level-12
+ description Predefined level-12 role
+#
+role name level-13
+ description Predefined level-13 role
+#
+role name level-14
+ description Predefined level-14 role
+#
+user-group system
+#
+return
