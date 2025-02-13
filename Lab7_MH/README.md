@@ -25,6 +25,7 @@
 |SRV10-20|DC-LZ-SW-1|00:50:00:00:0d:00|10.182.10.20|Eth1|
 |SRV10-30|DC-LZ-SW-2|00:50:00:00:17:00|10.182.10.30|Eth1|
 
+
 |АМР10-3|Leaf.3|00:50:79:66:68:08|192.168.10.30|Eth5|
 |АМР20-1|Leaf.2|00:50:79:66:68:09|192.168.20.10|Eth6|
 |АМР20-2|Leaf.3|00:50:01:00:06:00|192.168.20.20|Eth6|
@@ -35,227 +36,435 @@
 ### Overlay
 Для Overlay настроен iBGP.
 
-В IRB существует две модели:
- - Asymmetric IRB. Маршрутизация происходит на ingress VTEP, На egress VTEP только коммутация. На всех VTEP должны быть сконфигурированы все VLAN-VNI.
- - Symmetric IRB. Маршрутизация происходит на ingress VTEP и на egress VTEP. VLAN-VNI не должны быть одинаковы на всех VTEP фабрики, вместо этого выбирается один L3VNI через который и будет осуществляться маршрутизация.
- 
- Что бы не настраивать на всех Leaf все vlan и vni, мы будем исользовать модель Symmetric IRB, где надо будет только настроить L3VNI.
- 
-На Leaf настроим _Anycast gateway_, это значит, что на всех _VTEP_ для каждого svi мы настроим одинаковые IP адреса и единый MAC адрес для всех SVI `ip virtual-router mac-address 00:00:00:00:00:10`, для того что бы если конечный узел мигрирует за другой _VTEP_ ему не пришлось обновлять _ARP_ запись. Она будет одинакова на любом _VTEP_.
+### EVPN Multihoming
+Технология, которая позволяет подключать устройства к нескольким Leaf для повышения отказоустойчивости и возможности балансировки трафика.
+Multi-Homed устройством могут выступать как  L3 устройства так и устройства подключённые по технологии LAG.
+В лабороторной работе будем использовать подключение пары Leaf к коммутаторам с помощью LAG.
 
-#### Приступим к настройкам L3VNI.
-- Настроим _VRF_ для клиентов и включим для него маршрутизацию.
+#### Терминалогия
+
+Ethernet Segment (ES) - Группа линков соеденяющих PE устройства (Leaf) с Multi-Homed устройствами.
+Ethernet Segment Identifier (ESI) - уникальный идентификатор Ethernet Segment'а.
+Designated forwarder - узел который выбирается для каждого Ethernet Segment и ответсвенен за пересылку BUM трафика.
+ES-Import RT - Дополнительное комьюнити для генерации и приёма маршрутов Route Type-4.
+
+EVPN Multihoming использует два дополнительных типа маршрута: Route type-1 Ethernet Auto-discovery (A-D) и Route type-4 Ethernet Segment Route.
+- Route type-1 - используются для автоматического обноружения PE-маршрутизаторов, анонсов ESI, анонсов массовой отмены изученных MAC адресов при выходе из стройя одного из PE устройств.
+- Route type-2 - используются для выбора DF и для обнаружения VTEP подключённых к одному Ethernet Segment.
+
+#### Приступим к настройкам VXLAN MH.
+
+- Сначала настроим обычный _Port-Channel_ .
 ```
-vrf instance VRF1
-ip routing vrf VRF1
+interface Port-Channel1
+   description DC-LZ-SW
+   switchport trunk allowed vlan 10,20,30,2001
+   switchport mode trunk
 ```
-- Включим _vlan_ в _vrf_ и настроем ему ip адрес который будет служит шлюзом для клиентов. На всех _Leaf_ для конкретного _vlan_ указывается одинаковый адрес.
-- по *Best practice* из документаций ставим максимальное _mtu_
+Так же `route-target import` и `lacp system-id`. Но при желании в них можно закодировать различные идентификаторы, например: номер площадки, номер пары Leaf, номер интерфейса, вобщем всё что в голову/
+
+- Далее интерфейсу зададим н6астройки для ESI LAG.
+- Укажем одинаковый `Ethernet Segment Identifier` на всех Leaf где будет это ES. 
+- Укажем одинаковый `route-target import` на всех Leaf где есть данный ES.
+- укажем одинаковый `lacp system-id` на всех Leaf где подключаются клиенты к этому ES, чтобы они считали, что подключены к одному устройству. 
 ```
-interface Vlan10
-   mtu 9214
-   vrf VRF1
-   ip address virtual 192.168.10.1/24
-```
- - в настройках _vxlan_ интерфейса назначим `vni 5000` для _VRF1_, тем самы сделаем его _L3VNI_
-```
-interface Vxlan1
-   vxlan vrf VRF1 vni 5000
-```
-- Настроим IP-VRF и назнечим RD и RT. RT должны совпадать для импорта и экспорта.
-- Для борьбы с "молчаливыми клиентами" будем использовать _Route-type 5_. Включим дистрибьюцию _connected_ сетей в данном _VRF_ `redistribute connected`
-> Для инсталяции маршрута в таблицу маршрутизации конкретного *VRF*, VTEP должен знать куда слать трафик, до этого мы получали маршруты только /32 *Route Type-2* (MAC/IP >Advertisement route), которые разлетаются по EVPN только при появлении *MAC* адреса подключённого клиента к *VTEP*. Если клиент молчит, значит у нас нет маршрута. Что бы обойти данное ограничение в _EVPN_ есть _Route-type 5_, которые позволяют анонсировать IP префиксы. Следовательно мы сможем аннонсировать префикс _connected_ сети.
-```
-router bgp 65101
-   router-id 10.1.1.1
-     vrf VRF1
-      rd 10.1.1.1:5000
-      route-target import evpn 5000:5000
-      route-target export evpn 5000:5000
-      redistribute connected
-```
-- Настроим _Anycast gateway_.
-```
-ip virtual-router mac-address 00:00:00:00:00:10
-```
-### Итоговая конфигурция L3VNI на _Leaf.1_:
-```
-vrf instance VRF1
-ip routing vrf VRF1
-!
-interface Vlan10
-   mtu 9214
-   vrf VRF1
-   ip address virtual 192.168.10.1/24
-!
-interface Vxlan1
-   vxlan vrf VRF1 vni 5000
-!
-router bgp 65101
-   router-id 10.1.1.1
-     vrf VRF1
-      rd 10.1.1.1:5000
-      route-target import evpn 5000:5000
-      route-target export evpn 5000:5000
-      redistribute connected
-!
-ip virtual-router mac-address 00:00:00:00:00:10
+evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0001
+      route-target import 00:00:00:00:00:01
+   lacp system-id 01aa.bbbb.0001
 ```
 
-Скопируем настройки на остальные *Leaf*, отличаться будут только настройкой `interface Vlan`.
+ESI выбирался из логики:
+>Port-channel 1 = 0000:0000:0000:0000:0001\
+>Port-channel 2 = 0000:0000:0000:0000:0002
+
+
+- Добавим интерфейс в `Port-Channel`
+- Включим LACP
+
+```
+interface Ethernet7
+   description PO1_DC-LZ-SW
+   channel-group 1 mode active
+```
+На этом настройка EVPN MH (ESI LAG) закончена. Теперь конфигурацию надо повторить на тех Leaf на которых будет этот же ES. 
+
+### Итоговая конфигурция EVPN MH (ESI LAG) на _DC-LZ-LF-1_:
+
+```
+interface Port-Channel1
+   description DC-LZ-SW
+   switchport trunk allowed vlan 10,20,30,2001
+   switchport mode trunk
+   !
+   evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0001
+      route-target import 00:00:00:00:00:01
+   lacp system-id 01aa.bbbb.0001
+!
+interface Ethernet7
+   description PO1_DC-LZ-SW
+   channel-group 1 mode active
+```
+
+Скопируем настройки на *DC-LZ-LF-2*.
+
+Для наглядности настроим ещё на одной паре Leaf (_DC-LZ-LF-3_ и _DC-LZ-LF-4_) ESI LAG.
+
+```
+interface Port-Channel1
+   description SRV10-3
+   switchport access vlan 10
+   switchport trunk allowed vlan 10
+   switchport mode trunk
+   !
+   evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0002
+      route-target import 00:00:00:00:00:02
+   lacp system-id 01aa.bbbb.0002
+!
+interface Port-Channel2
+   description MGMT
+   switchport access vlan 2001
+   switchport trunk allowed vlan 2001
+   switchport mode trunk
+   !
+   evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0003
+      route-target import 00:00:00:00:00:03
+   lacp system-id 01aa.bbbb.0003
+!
+interface Ethernet5
+   description PO1_SRV10-3
+   channel-group 1 mode active
+!
+interface Ethernet6
+   description PO2_MGMT
+   channel-group 2 mode active
+```
+
+##### Настроим LAG на коммутаторах доступа к которым подключаются клиенты.
+
+- DC-LZ-SW-1
+
+```
+nterface Port-Channel1
+   description PO_LF1-LF2
+   switchport trunk allowed vlan 10,20,30,2001
+   switchport mode trunk
+!
+interface Ethernet7
+   description Po1_DC-LZ-LF-1
+   channel-group 1 mode active
+!
+interface Ethernet8
+   description Po1_DC-LZ-LF-2
+   channel-group 1 mode active
+```
+
+- DC-LZ-SW-2
+
+```
+interface Port-Channel1
+   description PO_LF3-LF4
+   switchport trunk allowed vlan 10
+   switchport mode trunk
+!
+interface Ethernet7
+   description Po1_DC-LZ-LF-3
+   channel-group 1 mode active
+!
+interface Ethernet8
+   description Po1_DC-LZ-LF-4
+   channel-group 1 mode active
+```
+
+- DC-LZ-SW-3
+
+```
+interface Port-Channel1
+   description PO_LF3-LF4
+   switchport trunk allowed vlan 2001
+   switchport mode trunk
+!
+interface Ethernet7
+   description Po1_DC-LZ-LF-3
+   channel-group 1 mode active
+!
+interface Ethernet8
+   description Po1_DC-LZ-LF-4
+   channel-group 1 mode active
+```
 
 ### Проверки
 
-На _Spine_ проверим, что **BGP** соседство со всеми _Leaf_ установилось.
+На _DC-LZ-LF-1_, посмотрим Route type 4
+
 ```
-Spine.1#show bgp summary 
-BGP summary information for VRF default
-Router identifier 10.0.1.1, local AS number 65001
-Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
---------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
-fe80::5201:ff:fe27:391%Et3        65103 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:fe27:391%Et3        65103 Established   L2VPN EVPN              Negotiated              6          6
-fe80::5201:ff:febe:ab97%Et2       65102 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:febe:ab97%Et2       65102 Established   L2VPN EVPN              Negotiated              6          6
-fe80::5201:ff:feca:7a8d%Et1       65101 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:feca:7a8d%Et1       65101 Established   L2VPN EVPN              Negotiated              4          4
+DC-LZ-LF-1#show bgp evpn route-type ethernet-segment 
+BGP routing table information for VRF default
+Router identifier 10.1.1.1, local AS number 64600
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending BGP convergence
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.1.1.2:1 ethernet-segment 0000:0000:0000:0000:0001 10.1.1.2
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.1.2.2:1 ethernet-segment 0000:0000:0000:0000:0001 10.1.2.2
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.2:1 ethernet-segment 0000:0000:0000:0000:0001 10.1.2.2
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.2:1 ethernet-segment 0000:0000:0000:0000:0002 10.1.3.2
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.2:1 ethernet-segment 0000:0000:0000:0000:0002 10.1.3.2
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.2:1 ethernet-segment 0000:0000:0000:0000:0002 10.1.4.2
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.2:1 ethernet-segment 0000:0000:0000:0000:0002 10.1.4.2
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.2:1 ethernet-segment 0000:0000:0000:0000:0003 10.1.3.2
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.2:1 ethernet-segment 0000:0000:0000:0000:0003 10.1.3.2
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.2:1 ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.2:1 ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+
 ```
+\
+Видим маршруты для каждого ES через те Leaf на которых он настроен.
+
+Посмотрим подробный вывод. Видм что в `Extended Community` присутствует `EvpnEsImportRt` которая позволяет VTEP'ам импортировать Route type-4 маршруты только для тех сегментов которыет которые на них настроены.
+
 ```
-Spine.2#show bgp summary 
-BGP summary information for VRF default
-Router identifier 10.0.2.1, local AS number 65001
-Neighbor                             AS Session State AFI/SAFI                AFI/SAFI State   NLRI Rcd   NLRI Acc
---------------------------- ----------- ------------- ----------------------- -------------- ---------- ----------
-fe80::5201:ff:fe27:391%Et3        65103 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:fe27:391%Et3        65103 Established   L2VPN EVPN              Negotiated              6          6
-fe80::5201:ff:febe:ab97%Et2       65102 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:febe:ab97%Et2       65102 Established   L2VPN EVPN              Negotiated              4          4
-fe80::5201:ff:feca:7a8d%Et1       65101 Established   IPv4 Unicast            Negotiated              3          3
-fe80::5201:ff:feca:7a8d%Et1       65101 Established   L2VPN EVPN              Negotiated              4          4
+DC-LZ-LF-1#show bgp evpn route-type ethernet-segment detail 
+BGP routing table information for VRF default
+Router identifier 10.1.1.1, local AS number 64600
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0001 10.1.1.2, Route Distinguisher: 10.1.1.2:1
+ Paths: 1 available
+  Local
+    - from - (0.0.0.0)
+      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0001 10.1.2.2, Route Distinguisher: 10.1.2.2:1
+ Paths: 2 available
+  Local
+    10.1.2.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.2.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+  Local
+    10.1.2.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.2.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0002 10.1.3.2, Route Distinguisher: 10.1.3.2:1
+ Paths: 2 available
+  Local
+    10.1.3.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+  Local
+    10.1.3.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0002 10.1.4.2, Route Distinguisher: 10.1.4.2:1
+ Paths: 2 available
+  Local
+    10.1.4.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+  Local
+    10.1.4.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.3.2, Route Distinguisher: 10.1.3.2:1
+ Paths: 2 available
+  Local
+    10.1.3.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+  Local
+    10.1.3.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2, Route Distinguisher: 10.1.4.2:1
+ Paths: 2 available
+  Local
+    10.1.4.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+  Local
+    10.1.4.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
 ```
+\
+На _DC-LZ-LF-1_, посмотрим Route type 1.\
+Видим какой VTEP сгенирировал для каждого VNI который присутствует в ESI свой маршрут.
+
+
+```
+DC-LZ-LF-1#show bgp evpn route-type auto-discovery
+BGP routing table information for VRF default
+Router identifier 10.1.1.1, local AS number 64600
+Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
+                    c - Contributing to ECMP, % - Pending BGP convergence
+Origin codes: i - IGP, e - EGP, ? - incomplete
+AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
+
+          Network                Next Hop              Metric  LocPref Weight  Path
+ * >      RD: 10.1.1.1:10 auto-discovery 0 0000:0000:0000:0000:0001
+                                 -                     -       -       0       i
+ * >      RD: 10.1.1.1:20 auto-discovery 0 0000:0000:0000:0000:0001
+                                 -                     -       -       0       i
+ * >      RD: 10.1.1.1:30 auto-discovery 0 0000:0000:0000:0000:0001
+                                 -                     -       -       0       i
+ * >      RD: 10.1.1.1:2001 auto-discovery 0 0000:0000:0000:0000:0001
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.1.2.1:10 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.1:10 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.2.1:20 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.1:20 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.2.1:30 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.1:30 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.2.1:2001 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.1:2001 auto-discovery 0 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >      RD: 10.1.1.2:1 auto-discovery 0000:0000:0000:0000:0001
+                                 -                     -       -       0       i
+ * >Ec    RD: 10.1.2.2:1 auto-discovery 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.2.2:1 auto-discovery 0000:0000:0000:0000:0001
+                                 10.1.2.2              -       100     0       i Or-ID: 10.1.2.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.1:10 auto-discovery 0 0000:0000:0000:0000:0002
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.1:10 auto-discovery 0 0000:0000:0000:0000:0002
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.1:10 auto-discovery 0 0000:0000:0000:0000:0002
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.1:10 auto-discovery 0 0000:0000:0000:0000:0002
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.2:1 auto-discovery 0000:0000:0000:0000:0002
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.2:1 auto-discovery 0000:0000:0000:0000:0002
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.2:1 auto-discovery 0000:0000:0000:0000:0002
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.2:1 auto-discovery 0000:0000:0000:0000:0002
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.1:2001 auto-discovery 0 0000:0000:0000:0000:0003
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.1:2001 auto-discovery 0 0000:0000:0000:0000:0003
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.1:2001 auto-discovery 0 0000:0000:0000:0000:0003
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.1:2001 auto-discovery 0 0000:0000:0000:0000:0003
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.3.2:1 auto-discovery 0000:0000:0000:0000:0003
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.3.2:1 auto-discovery 0000:0000:0000:0000:0003
+                                 10.1.3.2              -       100     0       i Or-ID: 10.1.3.1 C-LST: 10.0.1.1 
+ * >Ec    RD: 10.1.4.2:1 auto-discovery 0000:0000:0000:0000:0003
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+ *  ec    RD: 10.1.4.2:1 auto-discovery 0000:0000:0000:0000:0003
+                                 10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
+```
+\
+Подробный вывод Route type-1
+
+```
+DC-LZ-LF-1#show bgp evpn route-type ethernet-segment detail 
+BGP routing table information for VRF default
+Router identifier 10.1.1.1, local AS number 64600
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0001 10.1.1.2, Route Distinguisher: 10.1.1.2:1
+ Paths: 1 available
+  Local
+    - from - (0.0.0.0)
+      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0001 10.1.2.2, Route Distinguisher: 10.1.2.2:1
+ Paths: 2 available
+  Local
+    10.1.2.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.2.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+  Local
+    10.1.2.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.2.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:01
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0002 10.1.3.2, Route Distinguisher: 10.1.3.2:1
+ Paths: 2 available
+  Local
+    10.1.3.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+  Local
+    10.1.3.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0002 10.1.4.2, Route Distinguisher: 10.1.4.2:1
+ Paths: 2 available
+  Local
+    10.1.4.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+  Local
+    10.1.4.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:02
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.3.2, Route Distinguisher: 10.1.3.2:1
+ Paths: 2 available
+  Local
+    10.1.3.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+  Local
+    10.1.3.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.3.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2, Route Distinguisher: 10.1.4.2:1
+ Paths: 2 available
+  Local
+    10.1.4.2 from 10.0.2.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP head, ECMP, best, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+  Local
+    10.1.4.2 from 10.0.1.1 (10.0.1.1)
+      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, internal, ECMP, ECMP contributor
+      Originator: 10.1.4.1, Cluster list: 10.0.1.1 
+      Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
+```
+
+
  
- Проверим настройки VxLan командой `show interfaces vxlan 1`.
- ```
- Leaf.1#show interfaces vxlan 1 
-Vxlan1 is up, line protocol is up (connected)
-  Hardware is Vxlan
-  Source interface is Loopback1 and is active with 10.1.1.1
-  Listening on UDP port 4789
-  Replication/Flood Mode is headend with Flood List Source: EVPN
-  Remote MAC learning via EVPN
-  VNI mapping to VLANs
-  Static VLAN to VNI mapping is 
-    [10, 10]         
-  Dynamic VLAN to VNI mapping for 'evpn' is
-    [4094, 5000]     
-  Note: All Dynamic VLANs used by VCS are internal VLANs.
-        Use 'show vxlan vni' for details.
-  Static VRF to VNI mapping is 
-   [VRF1, 5000]
-  Headend replication flood vtep list is:
-    10 10.1.2.1        10.1.3.1       
-  Shared Router MAC is 0000.0000.0000
-```
-Видим что наш _L3VNI_ приммаплин к *VRF1*.
-
-Следующим шагом проверим маршруты в *EVPN* на *Leaf.1*
-```
-Leaf.1#show bgp evpn 
-BGP routing table information for VRF default
-Router identifier 10.1.1.1, local AS number 65101
-Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
-                    c - Contributing to ECMP, % - Pending BGP convergence
-Origin codes: i - IGP, e - EGP, ? - incomplete
-AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
-
-          Network                Next Hop              Metric  LocPref Weight  Path
- * >      RD: 10.1.1.1:10 imet 10.1.1.1
-                                 -                     -       -       0       i
- * >Ec    RD: 10.1.2.1:10 imet 10.1.2.1
-                                 10.1.2.1              -       100     0       65001 65102 i
- *  ec    RD: 10.1.2.1:10 imet 10.1.2.1
-                                 10.1.2.1              -       100     0       65001 65102 i
- * >Ec    RD: 10.1.2.1:20 imet 10.1.2.1
-                                 10.1.2.1              -       100     0       65001 65102 i
- *  ec    RD: 10.1.2.1:20 imet 10.1.2.1
-                                 10.1.2.1              -       100     0       65001 65102 i
- * >Ec    RD: 10.1.3.1:10 imet 10.1.3.1
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:10 imet 10.1.3.1
-                                 10.1.3.1              -       100     0       65001 65103 i
- * >Ec    RD: 10.1.3.1:20 imet 10.1.3.1
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:20 imet 10.1.3.1
-                                 10.1.3.1              -       100     0       65001 65103 i
- * >      RD: 10.1.1.1:5000 ip-prefix 192.168.10.0/24
-                                 -                     -       -       0       i
- * >Ec    RD: 10.1.2.1:5000 ip-prefix 192.168.10.0/24
-                                 10.1.2.1              -       100     0       65001 65102 i
- *  ec    RD: 10.1.2.1:5000 ip-prefix 192.168.10.0/24
-                                 10.1.2.1              -       100     0       65001 65102 i
- * >Ec    RD: 10.1.3.1:5000 ip-prefix 192.168.10.0/24
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:5000 ip-prefix 192.168.10.0/24
-                                 10.1.3.1              -       100     0       65001 65103 i
- * >Ec    RD: 10.1.2.1:5000 ip-prefix 192.168.20.0/24
-                                 10.1.2.1              -       100     0       65001 65102 i
- *  ec    RD: 10.1.2.1:5000 ip-prefix 192.168.20.0/24
-                                 10.1.2.1              -       100     0       65001 65102 i
- * >Ec    RD: 10.1.3.1:5000 ip-prefix 192.168.20.0/24
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:5000 ip-prefix 192.168.20.0/24
-                                 10.1.3.1              -       100     0       65001 65103 i
-
-```
-Видим что у нас есть только маршруты _Route-type 3_  до каждого _VTEP_ и _Route-type 5_ с префиксами _SVI_. Маршрутов _Route-type 2_ нет. Все наши клиенты молчат.
-
-Попробуем запустить пинг от АРМ10-1 до АРМ20-2
-```
-root@ARM10-1:~# ping 192.168.20.20
-PING 192.168.20.20 (192.168.20.20) 56(84) bytes of data.
-64 bytes from 192.168.20.20: icmp_seq=1 ttl=63 time=1405 ms
-64 bytes from 192.168.20.20: icmp_seq=2 ttl=63 time=394 ms
-64 bytes from 192.168.20.20: icmp_seq=3 ttl=62 time=97.0 ms
-64 bytes from 192.168.20.20: icmp_seq=4 ttl=62 time=105 ms
-64 bytes from 192.168.20.20: icmp_seq=5 ttl=62 time=94.1 ms
-^C
---- 192.168.20.20 ping statistics ---
-5 packets transmitted, 5 received, 0% packet loss, time 4024ms
-rtt min/avg/max/mdev = 94.102/419.070/1404.844/506.037 ms, pipe 2
-```
-Пинг прощёл успешно, маршрутизация между _VNI_ есть.
-
-Проверим ещё раз таблицу маршрутизации для маршрутов _Route-type 2_
-```
-Leaf.1#show bgp evpn route-type mac-ip 
-BGP routing table information for VRF default
-Router identifier 10.1.1.1, local AS number 65101
-Route status codes: * - valid, > - active, S - Stale, E - ECMP head, e - ECMP
-                    c - Contributing to ECMP, % - Pending BGP convergence
-Origin codes: i - IGP, e - EGP, ? - incomplete
-AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Link Local Nexthop
-
-          Network                Next Hop              Metric  LocPref Weight  Path
- * >Ec    RD: 10.1.3.1:20 mac-ip 0050.0100.0600
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:20 mac-ip 0050.0100.0600
-                                 10.1.3.1              -       100     0       65001 65103 i
- * >Ec    RD: 10.1.3.1:20 mac-ip 0050.0100.0600 192.168.20.20
-                                 10.1.3.1              -       100     0       65001 65103 i
- *  ec    RD: 10.1.3.1:20 mac-ip 0050.0100.0600 192.168.20.20
-                                 10.1.3.1              -       100     0       65001 65103 i
- * >      RD: 10.1.1.1:10 mac-ip 0050.0100.0b00
-                                 -                     -       -       0       i
- * >      RD: 10.1.1.1:10 mac-ip 0050.0100.0b00 192.168.10.10
-                                 -                     -       -       0       i
-```
-У нас появились маршруты _MAC-VRF_ и _MAC/IP-VRF_ **/32**.
-
-Посмотрим *DUMP* **BGP UPDATE** _Leaf.1_
-![alt text](RT-2.jpg)
-
-_Leaf.1_ анонсировал _Route-type 2_. Появился IP адрес клиента и второй _VNI 5000_. Так же появился второй RT для _L3VNI_. Ещё появилось дополнительлное _extended communitie_ **routers's mac** в котором записан MAC _SVI_ интерфейса. VTEP его использует как Destenation MAC address.
-
 <details>
 <summary>Посмотрим детальный вывод маршрутов _EVPN_ на _Leaf.1_ после пинга.</summary>
 
