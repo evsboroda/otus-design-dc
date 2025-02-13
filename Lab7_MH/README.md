@@ -7,7 +7,7 @@
 Для лабороторной работы в Underlay будем использовать OSPF, в Overlay iBGP.
 
 ### Схема стенда
-Схему для VxLAN/EVPN  будем использовать из [Проекта](https://github.com/evsboroda/otus-design-dc/tree/main/Lab4_BGP).
+Схему для VxLAN/EVPN  будем использовать из [Проекта](https://github.com/evsboroda/otus-design-dc/tree/main/Project) так как там функционал EVPN Multihoming уже настроен.
 
 ![alt text](Project/Scheme/DC-1_DC-LZ_Scheme.png)
 
@@ -33,7 +33,7 @@
 Для Underlay настроен на OSPF.
 
 ### Overlay
-Для общения клиентов в различных VLAN мы используем маршрутизацию, в VXLAN/EVPN функциональность маршрутизации называется IRB (Integrated Routing and Bridging) [RFC 9135](https://datatracker.ietf.org/doc/html/rfc9135) 
+Для Overlay настроен iBGP.
 
 В IRB существует две модели:
  - Asymmetric IRB. Маршрутизация происходит на ingress VTEP, На egress VTEP только коммутация. На всех VTEP должны быть сконфигурированы все VLAN-VNI.
