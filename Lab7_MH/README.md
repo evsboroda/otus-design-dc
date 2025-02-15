@@ -11,6 +11,9 @@
 
 ![alt text](Project/Scheme/DC-1_DC-LZ_Scheme.png)
 
+Будем использовать данный участок сети.
+
+![alt text](Shceme_MH.png)
 
 Для клиентов будем использовать следующие vlan и ip сети.
 
@@ -18,17 +21,16 @@
 |----|----|
 |vlan 10|10.182.10.0/24|
 |vlan 20|10.182.20.0/24|
+|vlan 2001| 10.200.1.0/24
 
 Таблица MAC и IP адресов АРМ.
 |АРМ|Switch|MAC|IP|Port|
 |---|-----|---|--|---|
 |SRV10-20|DC-LZ-SW-1|00:50:00:00:0d:00|10.182.10.20|Eth1|
 |SRV10-30|DC-LZ-SW-2|00:50:00:00:17:00|10.182.10.30|Eth1|
-
-
-|АМР10-3|Leaf.3|00:50:79:66:68:08|192.168.10.30|Eth5|
-|АМР20-1|Leaf.2|00:50:79:66:68:09|192.168.20.10|Eth6|
-|АМР20-2|Leaf.3|00:50:01:00:06:00|192.168.20.20|Eth6|
+|SRV20-20|DC-Lz-SW-1|00:50:00:00:0e:00|10.182.20.20|Eth2|
+|MGMT-1|DC-LZ-SW-1|00:50:00:00:13:00|10.200.1.10|Eth3|
+|MGMT-2|DC-Lz-SW-2|00:50:00:00:12:00|10.200.1.20|Eth1|
 
 ### Underlay
 Для Underlay настроен на OSPF.
@@ -49,8 +51,8 @@ Designated forwarder - узел который выбирается для ка�
 ES-Import RT - Дополнительное комьюнити для генерации и приёма маршрутов Route Type-4.
 
 EVPN Multihoming использует два дополнительных типа маршрута: Route type-1 Ethernet Auto-discovery (A-D) и Route type-4 Ethernet Segment Route.
-- Route type-1 - используются для автоматического обноружения PE-маршрутизаторов, анонсов ESI, анонсов массовой отмены изученных MAC адресов при выходе из стройя одного из PE устройств.
-- Route type-2 - используются для выбора DF и для обнаружения VTEP подключённых к одному Ethernet Segment.
+- Route type-1 - используются для автоматического обноружения PE-маршрутизаторов, анонсов ESI, анонсов массовой отмены изученных MAC адресов при выходе из стройя одного из PE устройств(mass wisthdraw).
+- Route type-4 - используются для выбора DF и для обнаружения VTEP подключённых к одному и тому же Ethernet Segment.
 
 #### Приступим к настройкам VXLAN MH.
 
@@ -76,8 +78,9 @@ evpn ethernet-segment
 
 ESI выбирался из логики:
 >Port-channel 1 = 0000:0000:0000:0000:0001\
->Port-channel 2 = 0000:0000:0000:0000:0002
+>Port-channel 2 = 0000:0000:0000:0000:0002\
 
+и далее по порядку.
 
 - Добавим интерфейс в `Port-Channel`
 - Включим LACP
@@ -109,7 +112,7 @@ interface Ethernet7
 
 Скопируем настройки на *DC-LZ-LF-2*.
 
-Для наглядности настроим ещё на одной паре Leaf (_DC-LZ-LF-3_ и _DC-LZ-LF-4_) ESI LAG.
+Для наглядности настроим ещё на одной паре Leaf _DC-LZ-LF-3_ и _DC-LZ-LF-4_ ESI LAG.
 
 ```
 interface Port-Channel1
@@ -198,7 +201,7 @@ interface Ethernet8
 
 ### Проверки
 
-На _DC-LZ-LF-1_, посмотрим Route type 4
+ - На _DC-LZ-LF-1_, посмотрим Route type 4. Видим VTEP подключённые к одному и томуже ES.
 
 ```
 DC-LZ-LF-1#show bgp evpn route-type ethernet-segment 
@@ -234,10 +237,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
                                  10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
 
 ```
-\
-Видим маршруты для каждого ES через те Leaf на которых он настроен.
 
-Посмотрим подробный вывод. Видм что в `Extended Community` присутствует `EvpnEsImportRt` которая позволяет VTEP'ам импортировать Route type-4 маршруты только для тех сегментов которыет которые на них настроены.
+<details>
+<summary>Посмотрим подробный вывод. Видм что в `Extended Community` присутствует `EvpnEsImportRt` которая позволяет VTEP'ам импортировать Route type-4 маршруты только для тех сегментов которыет которые на них настроены.</summary>
 
 ```
 DC-LZ-LF-1#show bgp evpn route-type ethernet-segment detail 
@@ -310,10 +312,85 @@ BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2, 
       Originator: 10.1.4.1, Cluster list: 10.0.1.1 
       Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
 ```
-\
-На _DC-LZ-LF-1_, посмотрим Route type 1.\
-Видим какой VTEP сгенирировал для каждого VNI который присутствует в ESI свой маршрут.
+</details>
 
+<details>
+<summary> Посмотрим вывод `bgp evpn instance` на *DC-LZ-LF-1*. Видим к каким EVI подключён VTEP. Так же видим для каждого EVI DF.
+
+```
+DC-LZ-LF-1#show bgp evpn instance 
+EVPN instance: VLAN 10
+  Route distinguisher: 0:0
+  Route target import: Route-Target-AS:10:1010
+  Route target export: Route-Target-AS:10:1010
+  Service interface: VLAN-based
+  Local VXLAN IP address: 10.1.1.2
+  VXLAN: enabled
+  MPLS: disabled
+  Local ethernet segment:
+    ESI: 0000:0000:0000:0000:0001
+      Interface: Port-Channel1
+      Mode: all-active
+      State: up
+      ES-Import RT: 00:00:00:00:00:01
+      DF election algorithm: modulus
+      Designated forwarder: 10.1.1.2
+      Non-Designated forwarder: 10.1.2.2
+EVPN instance: VLAN 20
+  Route distinguisher: 0:0
+  Route target import: Route-Target-AS:20:1020
+  Route target export: Route-Target-AS:20:1020
+  Service interface: VLAN-based
+  Local VXLAN IP address: 10.1.1.2
+  VXLAN: enabled
+  MPLS: disabled
+  Local ethernet segment:
+    ESI: 0000:0000:0000:0000:0001
+      Interface: Port-Channel1
+      Mode: all-active
+      State: up
+      ES-Import RT: 00:00:00:00:00:01
+      DF election algorithm: modulus
+      Designated forwarder: 10.1.1.2
+      Non-Designated forwarder: 10.1.2.2
+EVPN instance: VLAN 2001
+  Route distinguisher: 0:0
+  Route target import: Route-Target-AS:2001:1010
+  Route target export: Route-Target-AS:2001:1010
+  Service interface: VLAN-based
+  Local VXLAN IP address: 10.1.1.2
+  VXLAN: enabled
+  MPLS: disabled
+  Local ethernet segment:
+    ESI: 0000:0000:0000:0000:0001
+      Interface: Port-Channel1
+      Mode: all-active
+      State: up
+      ES-Import RT: 00:00:00:00:00:01
+      DF election algorithm: modulus
+      Designated forwarder: 10.1.2.2
+      Non-Designated forwarder: 10.1.1.2
+EVPN instance: VLAN 30
+  Route distinguisher: 0:0
+  Route target import: Route-Target-AS:30:1030
+  Route target export: Route-Target-AS:30:1030
+  Service interface: VLAN-based
+  Local VXLAN IP address: 10.1.1.2
+  VXLAN: enabled
+  MPLS: disabled
+  Local ethernet segment:
+    ESI: 0000:0000:0000:0000:0001
+      Interface: Port-Channel1
+      Mode: all-active
+      State: up
+      ES-Import RT: 00:00:00:00:00:01
+      DF election algorithm: modulus
+      Designated forwarder: 10.1.1.2
+      Non-Designated forwarder: 10.1.2.2
+```
+</summary>
+
+На _DC-LZ-LF-1_, посмотрим Route type 1. Видим VTEP подключенные к одним и тем же EVi.
 
 ```
 DC-LZ-LF-1#show bgp evpn route-type auto-discovery
@@ -388,8 +465,9 @@ AS Path Attributes: Or-ID - Originator ID, C-LST - Cluster List, LL Nexthop - Li
  *  ec    RD: 10.1.4.2:1 auto-discovery 0000:0000:0000:0000:0003
                                  10.1.4.2              -       100     0       i Or-ID: 10.1.4.1 C-LST: 10.0.1.1 
 ```
-\
-Подробный вывод Route type-1
+
+<details>
+<summary>Подробный вывод Route type-1</summary>
 
 ```
 DC-LZ-LF-1#show bgp evpn route-type ethernet-segment detail 
@@ -462,129 +540,107 @@ BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2, 
       Originator: 10.1.4.1, Cluster list: 10.0.1.1 
       Extended Community: TunnelEncap:tunnelTypeVxlan EvpnEsImportRt:00:00:00:00:00:03
 ```
-
-
- 
-<details>
-<summary>Посмотрим детальный вывод маршрутов _EVPN_ на _Leaf.1_ после пинга.</summary>
-
-```
-Leaf.1#show bgp evpn route-type mac-ip detail 
-BGP routing table information for VRF default
-Router identifier 10.1.1.1, local AS number 65101
-BGP routing table entry for mac-ip 0050.0100.0b00, Route Distinguisher: 10.1.1.1:10
- Paths: 1 available
-  Local
-    - from - (0.0.0.0)
-      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
-      Extended Community: Route-Target-AS:10:10010 TunnelEncap:tunnelTypeVxlan
-      VNI: 10 ESI: 0000:0000:0000:0000:0000
-BGP routing table entry for mac-ip 0050.0100.0b00 192.168.10.10, Route Distinguisher: 10.1.1.1:10
- Paths: 1 available
-  Local
-    - from - (0.0.0.0)
-      Origin IGP, metric -, localpref -, weight 0, tag 0, valid, local, best
-      Extended Community: Route-Target-AS:10:10010 Route-Target-AS:5000:5000 TunnelEncap:tunnelTypeVxlan
-      VNI: 10 L3 VNI: 5000 ESI: 0000:0000:0000:0000:0000
-BGP routing table entry for mac-ip 0050.7966.6809, Route Distinguisher: 10.1.2.1:20
- Paths: 2 available
-  65001 65102
-    10.1.2.1 from fe80::5201:ff:fe4b:6277%Et2 (10.0.2.1)
-      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP head, ECMP, best, ECMP contributor
-      Extended Community: Route-Target-AS:20:10020 TunnelEncap:tunnelTypeVxlan
-      VNI: 20 ESI: 0000:0000:0000:0000:0000
-  65001 65102
-    10.1.2.1 from fe80::5201:ff:fee5:e36a%Et1 (10.0.1.1)
-      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP, ECMP contributor
-      Extended Community: Route-Target-AS:20:10020 TunnelEncap:tunnelTypeVxlan
-      VNI: 20 ESI: 0000:0000:0000:0000:0000
-BGP routing table entry for mac-ip 0050.7966.6809 192.168.20.10, Route Distinguisher: 10.1.2.1:20
- Paths: 2 available
-  65001 65102
-    10.1.2.1 from fe80::5201:ff:fe4b:6277%Et2 (10.0.2.1)
-      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP head, ECMP, best, ECMP contributor
-      Extended Community: Route-Target-AS:20:10020 Route-Target-AS:5000:5000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:01:00:be:ab:97
-      VNI: 20 L3 VNI: 5000 ESI: 0000:0000:0000:0000:0000
-  65001 65102
-    10.1.2.1 from fe80::5201:ff:fee5:e36a%Et1 (10.0.1.1)
-      Origin IGP, metric -, localpref 100, weight 0, tag 0, valid, external, ECMP, ECMP contributor
-      Extended Community: Route-Target-AS:20:10020 Route-Target-AS:5000:5000 TunnelEncap:tunnelTypeVxlan EvpnRouterMac:50:01:00:be:ab:97
-      VNI: 20 L3 VNI: 5000 ESI: 0000:0000:0000:0000:0000
-```
-<summary> В маршрутах MAC/IP видим по два RT, и <code>EvpnRouterMac:50:01:00:be:ab:97</code> svi интерфейса vlan 20 на Leaf.2 </summary>
 </details>
 
-Посмотрим *DUMP*  **ICMP** между _Leaf.1_ и _Sine.2_
+Проверим состояния LACP интерфейсов *Port-channel* 
 
-![alt text](ICMP_L3.jpg)
+#### DC-LZ-SW-1
 
-В заголовке вдим уже не изначальный _VNI_ 10, а L3VNI _5000_.
-
-<details>
-<summary>C Leaf.1 проверим доступность клиентов в другой сети.</summary>
-ARM10-1 -> ARM20-1
+LACP активен.
 
 ```
- root@ARM10-1:~# ping 192.168.20.10
-PING 192.168.20.10 (192.168.20.10) 56(84) bytes of data.
-64 bytes from 192.168.20.10: icmp_seq=1 ttl=62 time=172 ms
-64 bytes from 192.168.20.10: icmp_seq=2 ttl=62 time=67.8 ms
-64 bytes from 192.168.20.10: icmp_seq=3 ttl=62 time=64.9 ms
-64 bytes from 192.168.20.10: icmp_seq=4 ttl=62 time=50.4 ms
-64 bytes from 192.168.20.10: icmp_seq=5 ttl=62 time=58.3 ms
+DC-LZ-SW-1#show lacp 
+% Incomplete command
+DC-LZ-SW-1#show lacp peer 
+State: A = Active, P = Passive; S=ShortTimeout, L=LongTimeout;
+       G = Aggregable, I = Individual; s+=InSync, s-=OutOfSync;
+       C = Collecting, X = state machine expired,
+       D = Distributing, d = default neighbor state
+                 |                        Partner                              
+ Port    Status  | Sys-id                    Port#   State     OperKey  PortPri
+------ ----------|------------------------- ------- --------- --------- -------
+Port Channel Port-Channel1:                                            
+ Et7     Bundled | 8000,01-aa-bb-bb-00-01        7   ALGs+CD    0x0001    32768
+ Et8     Bundled | 8000,01-aa-bb-bb-00-01        7   ALGs+CD    0x0001    32768
+```
+
+#### DC-LZ-SW-2
+
+LACP активен.
+
+```
+DC-LZ-SW-2#show lacp peer 
+State: A = Active, P = Passive; S=ShortTimeout, L=LongTimeout;
+       G = Aggregable, I = Individual; s+=InSync, s-=OutOfSync;
+       C = Collecting, X = state machine expired,
+       D = Distributing, d = default neighbor state
+                 |                        Partner                              
+ Port    Status  | Sys-id                    Port#   State     OperKey  PortPri
+------ ----------|------------------------- ------- --------- --------- -------
+Port Channel Port-Channel1:                                            
+ Et7     Bundled | 8000,01-aa-bb-bb-00-02        5   ALGs+CD    0x0001    32768
+ Et8     Bundled | 8000,01-aa-bb-bb-00-02        5   ALGs+CD    0x0001    32768
+```
+
+#### DC-LZ-SW-3
+
+LACP активен.
+
+```
+DC-LZ-SW-3#show lacp peer 
+State: A = Active, P = Passive; S=ShortTimeout, L=LongTimeout;
+       G = Aggregable, I = Individual; s+=InSync, s-=OutOfSync;
+       C = Collecting, X = state machine expired,
+       D = Distributing, d = default neighbor state
+                 |                        Partner                              
+ Port    Status  | Sys-id                    Port#   State     OperKey  PortPri
+------ ----------|------------------------- ------- --------- --------- -------
+Port Channel Port-Channel1:                                            
+ Et7     Bundled | 8000,01-aa-bb-bb-00-03        6   ALGs+CD    0x0002    32768
+ Et8     Bundled | 8000,01-aa-bb-bb-00-03        6   ALGs+CD    0x0002    32768
+```
+
+### Проверки ping.
+
+Ping SRV10-20 -> SRV10-30 со всеми активными линками.
+
+```
+PING 10.182.10.30 (10.182.10.30) 56(84) bytes of data.
+64 bytes from 10.182.10.30: icmp_seq=1 ttl=64 time=88.0 ms
+64 bytes from 10.182.10.30: icmp_seq=2 ttl=64 time=82.9 ms
+64 bytes from 10.182.10.30: icmp_seq=3 ttl=64 time=88.6 ms
+64 bytes from 10.182.10.30: icmp_seq=4 ttl=64 time=80.3 ms
+64 bytes from 10.182.10.30: icmp_seq=5 ttl=64 time=80.9 ms
 ^C
---- 192.168.20.10 ping statistics ---
-5 packets transmitted, 5 received, 0% packet loss, time 4007ms
-rtt min/avg/max/mdev = 50.436/82.712/172.157/45.120 ms
+--- 10.182.10.30 ping statistics ---
+5 packets transmitted, 5 received, 0% packet loss, time 4006ms
+rtt min/avg/max/mdev = 80.316/84.141/88.600/3.500 ms
+```
+
+Запустим пинг между SRV10-2 и SRV10-30. На *DC-LZ-LF-2* выключим интрефейс Eth7 в сторону *DC-LZ-SW-1* и посмотрим что будет.
 
 ```
-ARM10-1 -> ARM20-2
+[1739628038.029808] 64 bytes from 10.182.10.30: icmp_seq=35 ttl=64 time=89.6 ms
+[1739628039.028188] 64 bytes from 10.182.10.30: icmp_seq=36 ttl=64 time=87.5 ms
+[1739628040.030650] 64 bytes from 10.182.10.30: icmp_seq=37 ttl=64 time=89.8 ms
+[1739628041.029426] 64 bytes from 10.182.10.30: icmp_seq=38 ttl=64 time=87.9 ms
+[1739628042.965944] no answer yet for icmp_seq=39
+[1739628043.068035] 64 bytes from 10.182.10.30: icmp_seq=40 ttl=64 time=101 ms
+[1739628044.056136] 64 bytes from 10.182.10.30: icmp_seq=41 ttl=64 time=89.4 ms
+[1739628045.069319] 64 bytes from 10.182.10.30: icmp_seq=42 ttl=64 time=102 ms
+[1739628046.061744] 64 bytes from 10.182.10.30: icmp_seq=43 ttl=64 time=94.3 ms
+[1739628047.095877] 64 bytes from 10.182.10.30: icmp_seq=44 ttl=64 time=127 ms
+[1739628048.056336] 64 bytes from 10.182.10.30: icmp_seq=45 ttl=64 time=87.7 ms
+[1739628049.079367] 64 bytes from 10.182.10.30: icmp_seq=46 ttl=64 time=111 ms
+[1739628050.064149] 64 bytes from 10.182.10.30: icmp_seq=47 ttl=64 time=95.1 ms
 ```
-PING 192.168.20.20 (192.168.20.20) 56(84) bytes of data.
-64 bytes from 192.168.20.20: icmp_seq=1 ttl=62 time=234 ms
-64 bytes from 192.168.20.20: icmp_seq=2 ttl=62 time=123 ms
-64 bytes from 192.168.20.20: icmp_seq=3 ttl=62 time=66.3 ms
-64 bytes from 192.168.20.20: icmp_seq=4 ttl=62 time=154 ms
-64 bytes from 192.168.20.20: icmp_seq=5 ttl=62 time=64.4 ms
-64 bytes from 192.168.20.20: icmp_seq=6 ttl=62 time=67.9 ms
-64 bytes from 192.168.20.20: icmp_seq=7 ttl=62 time=60.2 ms
-^C
---- 192.168.20.20 ping statistics ---
-7 packets transmitted, 7 received, 0% packet loss, time 6008ms
-rtt min/avg/max/mdev = 60.199/109.889/234.353/60.675 ms
-```
-</details>
 
-<details>
-<summary>Проверим таблицу маршрутизации для VRF1. У нас есть как и ip-mac /32 маршруты полученные из Route-type 2, так и /24 полученные из Route-type 5</summary>
+Пропал один пинг. А так же произошёл массовый отзыв маршрутов через *DC-LZ-LF-2* по средствам RT-1.
 
-```
-VRF: VRF1
-Codes: C - connected, S - static, K - kernel, 
-       O - OSPF, IA - OSPF inter area, E1 - OSPF external type 1,
-       E2 - OSPF external type 2, N1 - OSPF NSSA external type 1,
-       N2 - OSPF NSSA external type2, B - Other BGP Routes,
-       B I - iBGP, B E - eBGP, R - RIP, I L1 - IS-IS level 1,
-       I L2 - IS-IS level 2, O3 - OSPFv3, A B - BGP Aggregate,
-       A O - OSPF Summary, NG - Nexthop Group Static Route,
-       V - VXLAN Control Service, M - Martian,
-       DH - DHCP client installed default route,
-       DP - Dynamic Policy Route, L - VRF Leaked,
-       G  - gRIBI, RC - Route Cache Route
+![alt text](RT-1_mass_withdraw.png)
 
-Gateway of last resort is not set
+Проверки на паре *DC-LZ-LF-3* и *DC-LZ-LF-4* преводить не буду. Картина будет схожей.
 
- B E      192.168.10.20/32 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
- B E      192.168.10.30/32 [200/0] via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
- C        192.168.10.0/24 is directly connected, Vlan10
- B E      192.168.20.10/32 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
- B E      192.168.20.20/32 [200/0] via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
- B E      192.168.20.0/24 [200/0] via VTEP 10.1.2.1 VNI 5000 router-mac 50:01:00:be:ab:97 local-interface Vxlan1
-                                  via VTEP 10.1.3.1 VNI 5000 router-mac 50:01:00:27:03:91 local-interface Vxlan1
-```
-</details>
-
-Итог: Настроили L3 связанности между клиентами с использованием EVPN. С помощью *Route-type 5* решили проблему "молчаливых клиентов"
-
+Итог: Настроили EVPN Multihoming. Получили отказоустойчивое подключение клиентов по средствам LAG к Leaf. Проверили маршруты RT-1 и RT-4.
 
 
