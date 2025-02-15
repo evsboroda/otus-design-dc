@@ -316,7 +316,7 @@ BGP routing table entry for ethernet-segment 0000:0000:0000:0000:0003 10.1.4.2, 
 </details>
 
 <details>
-<summary> Посмотрим вывод `bgp evpn instance` на *DC-LZ-LF-1*. Видим к каким EVI подключён VTEP. Так же видим для каждого EVI DF.
+<summary> Посмотрим вывод `bgp evpn instance` на *DC-LZ-LF-1*. Видим к каким EVI подключён VTEP. Так же видим для каждого EVI DF.</summary>
 
 ```
 DC-LZ-LF-1#show bgp evpn instance 
@@ -389,7 +389,7 @@ EVPN instance: VLAN 30
       Designated forwarder: 10.1.1.2
       Non-Designated forwarder: 10.1.2.2
 ```
-</summary>
+</details>
 
 На _DC-LZ-LF-1_, посмотрим Route type 1. Видим VTEP подключенные к одним и тем же EVi.
 
