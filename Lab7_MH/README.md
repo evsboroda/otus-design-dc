@@ -636,7 +636,27 @@ rtt min/avg/max/mdev = 80.316/84.141/88.600/3.500 ms
 [1739628050.064149] 64 bytes from 10.182.10.30: icmp_seq=47 ttl=64 time=95.1 ms
 ```
 
-Пропал один пинг. А так же произошёл массовый отзыв маршрутов через *DC-LZ-LF-2* по средствам RT-1.
+Обратно включим Eth7 на *DC-LZ-LF-2* и выключим Eth7 на *DC-LZ-LF-1* 
+
+```
+PING 10.182.10.30 (10.182.10.30) 56(84) bytes of data.
+[1739664340.927190] 64 bytes from 10.182.10.30: icmp_seq=1 ttl=64 time=79.8 ms
+[1739664341.926662] 64 bytes from 10.182.10.30: icmp_seq=2 ttl=64 time=78.3 ms
+[1739664342.930910] 64 bytes from 10.182.10.30: icmp_seq=3 ttl=64 time=81.0 ms
+[1739664343.926802] 64 bytes from 10.182.10.30: icmp_seq=4 ttl=64 time=75.5 ms
+[1739664344.940468] 64 bytes from 10.182.10.30: icmp_seq=5 ttl=64 time=87.3 ms
+[1739664345.940763] 64 bytes from 10.182.10.30: icmp_seq=6 ttl=64 time=86.0 ms
+[1739664346.931427] 64 bytes from 10.182.10.30: icmp_seq=7 ttl=64 time=75.4 ms
+[1739664347.944029] 64 bytes from 10.182.10.30: icmp_seq=8 ttl=64 time=86.4 ms
+[1739664349.877915] no answer yet for icmp_seq=9
+[1739664349.972457] 64 bytes from 10.182.10.30: icmp_seq=10 ttl=64 time=94.4 ms
+[1739664350.967036] 64 bytes from 10.182.10.30: icmp_seq=11 ttl=64 time=87.3 ms
+```
+В обоих случаях потеряли один пакет.
+
+Посмотрим DUMP.
+
+Так же, с помощью RT-1 произошёл массовый отзыв маршрутов, которые анонсировались через *DC-LZ-LF-2*.
 
 ![alt text](RT-1_mass_withdraw.png)
 

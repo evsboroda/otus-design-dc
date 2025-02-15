@@ -1,0 +1,57 @@
+service routing protocols model ribd
+!
+hostname DC-LZ-SW-1
+!
+spanning-tree mode mstp
+!
+vlan 10
+   name SRV10
+!
+vlan 20
+   name SRV20
+!
+vlan 30
+   name SRV30
+!
+vlan 2001
+   name MGMT
+!
+interface Port-Channel1
+   description PO_LF1-LF2
+   switchport trunk allowed vlan 10,20,30,2001
+   switchport mode trunk
+!
+interface Ethernet1
+   description SRV10
+   switchport access vlan 10
+!
+interface Ethernet2
+   description SRV20
+   switchport access vlan 20
+!
+interface Ethernet3
+   description MGMT
+   switchport access vlan 2001
+!
+interface Ethernet4
+!
+interface Ethernet5
+   description DC-1-SW_DCI
+   switchport trunk allowed vlan 30
+   switchport mode trunk
+!
+interface Ethernet6
+!
+interface Ethernet7
+   description Po1_DC-LZ-LF-1
+   channel-group 1 mode active
+!
+interface Ethernet8
+   description Po1_DC-LZ-LF-2
+   channel-group 1 mode active
+!
+interface Management1
+!
+no ip routing
+!
+end

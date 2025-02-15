@@ -1,0 +1,167 @@
+service routing protocols model multi-agent
+!
+hostname DC-LZ-LF-3
+!
+spanning-tree mode mstp
+!
+clock timezone Europe/Moscow
+!
+vlan 10
+   name SRV10
+!
+vlan 2001
+   name MGMT
+!
+vrf instance MGMT
+!
+vrf instance SRV
+!
+interface Port-Channel1
+   description SRV10-3
+   switchport access vlan 10
+   switchport trunk allowed vlan 10
+   switchport mode trunk
+   !
+   evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0002
+      route-target import 00:00:00:00:00:02
+   lacp system-id 01aa.bbbb.0002
+!
+interface Port-Channel2
+   description MGMT
+   switchport access vlan 2001
+   switchport trunk allowed vlan 2001
+   switchport mode trunk
+   !
+   evpn ethernet-segment
+      identifier 0000:0000:0000:0000:0003
+      route-target import 00:00:00:00:00:03
+   lacp system-id 01aa.bbbb.0003
+!
+interface Ethernet1
+   description DC-LZ-SP.1
+   mtu 9214
+   no switchport
+   ip address 10.2.1.5/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 DQRB1cPDQvk=
+!
+interface Ethernet2
+   description DC-LZ-SP.2
+   mtu 9214
+   no switchport
+   ip address 10.2.2.5/31
+   bfd interval 1000 min-rx 1000 multiplier 5
+   no ip ospf neighbor bfd
+   ip ospf network point-to-point
+   ip ospf authentication message-digest
+   ip ospf area 0.0.0.0
+   ip ospf message-digest-key 10 md5 7 epwCMyhnEnI=
+!
+interface Ethernet3
+!
+interface Ethernet4
+!
+interface Ethernet5
+   description PO1_SRV10-3
+   channel-group 1 mode active
+!
+interface Ethernet6
+   description PO2_MGMT
+   channel-group 2 mode active
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Loopback1
+   description iBGP
+   ip address 10.1.3.1/32
+   ip ospf area 0.0.0.0
+!
+interface Loopback2
+   description VXLAN
+   ip address 10.1.3.2/32
+   ip ospf area 0.0.0.0
+!
+interface Management1
+!
+interface Vlan10
+   description SRV10-GW
+   mtu 9214
+   vrf SRV
+   ip address 10.182.10.1/24
+!
+interface Vlan2001
+   description MGMT-GW
+   mtu 9214
+   vrf MGMT
+   ip address 10.200.1.1/24
+!
+interface Vxlan1
+   vxlan source-interface Loopback2
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10
+   vxlan vlan 2001 vni 2001
+   vxlan vrf MGMT vni 6000
+   vxlan vrf SRV vni 5000
+!
+ip virtual-router mac-address 00:00:00:00:00:10
+!
+ip routing
+ip routing vrf MGMT
+ip routing vrf SRV
+!
+router bgp 64600
+   router-id 10.1.3.1
+   timers bgp 30 90
+   neighbor SPINES peer group
+   neighbor SPINES remote-as 64600
+   neighbor SPINES update-source Loopback1
+   neighbor SPINES send-community extended
+   neighbor 10.0.1.1 peer group SPINES
+   neighbor 10.0.1.1 description DC-LZ-SP.1
+   neighbor 10.0.2.1 peer group SPINES
+   neighbor 10.0.2.1 description DC-LZ-SP.2
+   !
+   vlan 10
+      rd auto
+      route-target both 10:1010
+      redistribute learned
+   !
+   vlan 2001
+      rd auto
+      route-target both 2001:1010
+      redistribute learned
+   !
+   address-family evpn
+      neighbor SPINES activate
+   !
+   address-family ipv4
+      no neighbor SPINES activate
+   !
+   vrf MGMT
+      rd 10.1.3.1:6000
+      route-target import evpn 6000:6000
+      route-target export evpn 6000:6000
+      redistribute connected
+   !
+   vrf SRV
+      rd 10.1.3.1:5000
+      route-target import evpn 5000:5000
+      route-target export evpn 5000:5000
+      redistribute connected
+!
+router ospf 10
+   router-id 10.1.3.1
+   passive-interface default
+   no passive-interface Ethernet1
+   no passive-interface Ethernet2
+   max-lsa 12000
+   log-adjacency-changes detail
+!
+end
