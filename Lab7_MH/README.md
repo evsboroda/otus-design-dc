@@ -9,7 +9,7 @@
 ### Схема стенда
 Схему для VxLAN/EVPN  будем использовать из [Проекта](https://github.com/evsboroda/otus-design-dc/tree/main/Project) так как там функционал EVPN Multihoming уже настроен.
 
-![alt text](Project/Scheme/DC-1_DC-LZ_Scheme.png)
+![alt text](DC-1_DC-LZ_Scheme.png)
 
 Будем использовать данный участок сети.
 
